@@ -27,17 +27,18 @@ char *filename=0;
 int mode=MODE_DISPLAY;
 
 //you may want to make these smaller for debugging purposes
-#define WIDTH 640
-#define HEIGHT 480
+//#define WIDTH 640
+//#define HEIGHT 480
 
-//#define WIDTH 320
-//#define HEIGHT 240
+#define WIDTH 320
+#define HEIGHT 240
 
 //the field of view of the camera
 #define fov 60.0
 #define SCREEN_DISTANCE 0.1
 
 #define PI 3.14159265
+
 unsigned char buffer[HEIGHT][WIDTH][3];
 double SCREEN_WIDTH;
 double SCREEN_HEIGHT;
@@ -111,6 +112,8 @@ void draw_scene()
             0,0,-1,
             0,1,0);*/
   unsigned int x,y;
+
+  
   //simple output
   for(x=0; x<WIDTH; x++)
   {
@@ -126,6 +129,19 @@ void draw_scene()
   }
   printf("Done!\n"); fflush(stdout);
 }
+
+double* make_unit (double* p){
+    float divisor = sqrt (pow(p[0],2) + pow(p[1],2) + pow(p[2],2));
+    if(divisor == 0)
+    {
+      p[0] = 0; p[1] = 0; p[2] = 0;
+      return p;
+    }
+    p[0] = p[0] / divisor;
+    p[1] = p[1] / divisor;
+    p[2] = p[2] / divisor;
+    return p;
+  }
 
 void plot_pixel_display(int x,int y,unsigned char r,unsigned char g,unsigned char b)
 {
@@ -299,6 +315,71 @@ void printRay2 (Ray ray){
    //std::cout << "dir = " << "{" << ray.direction[0] << ", " << ray.direction[1] << ", " << ray.direction[2] << " }" << std::endl;
 }
 
+double* crossProduct (double* u, double* v){
+     double product[3];
+      product[0] = u[1] * v[2] - v[1] * u[2];
+      product[1] = v[0] * u[2] - u[0] * v[2];
+      product[2] = u[0] * v[1] - v[0] * u[1];
+      return make_unit(product);
+  }
+
+double innerProduct (double* u, double* v){
+     double product;
+      product = u[0]*v[0] + u[1]*v[1] + u[2]*v[2];
+      return product;
+  }
+
+void vector (double* a, double* b, double* c){
+  a[0] = b[0] - c[0]; a[1] = b[1] - c[1]; a[2] = b[2] - c[2];
+  return;
+}
+
+bool triangle_intersection( Triangle triangle, Ray ray) {
+
+  double* p = ray.origin;
+  double* d = ray.direction;
+
+  double* v0 = triangle.v[0].position;
+  double* v1 = triangle.v[1].position;
+  double* v2 = triangle.v[2].position;
+  double e1[3],e2[3],s[3];
+  double a,f,u,v;
+  vector(e1,v1,v0);
+  vector(e2,v2,v0);
+
+  double* h = crossProduct(d,e2);
+   a = innerProduct(e1,h);
+
+  if (a > -0.00001 && a < 0.00001)
+    return(false);
+
+  f = 1/a;
+  vector(s,p,v0);
+  u = f * (innerProduct(s,h));
+
+  if (u < 0.0 || u > 1.0)
+    return(false);
+
+  double* q = crossProduct(s,e1);
+  v = f * innerProduct(d,q);
+
+  if (v < 0.0 || u + v > 1.0)
+    return(false);
+
+  // at this stage we can compute t to find out where
+  // the intersection point is on the line
+  double t = f * innerProduct(e2,q);
+
+  if (t > 0.00001) // ray intersection
+    return(true);
+
+  else // this means that there is a line intersection
+     // but not a ray intersection
+     return (false);
+
+}
+
+
 bool sphere_intersection (Sphere sphere, Ray ray){
 
   double xo = ray.origin[0]; double yo = ray.origin[1]; double zo = ray.origin[2];
@@ -325,6 +406,7 @@ void raySetup (){
   double tangent  =  tan ( angle * PI / 180.0 ); 
   SCREEN_WIDTH = tangent * SCREEN_DISTANCE * 2;
   SCREEN_HEIGHT = SCREEN_WIDTH * ((double)((double)HEIGHT/(double)WIDTH));
+  //SCREEN_HEIGHT = SCREEN_WIDTH;
   SCREEN_WIDTH_INCR = SCREEN_WIDTH / (double) WIDTH;
   SCREEN_HEIGHT_INCR = SCREEN_HEIGHT /(double) HEIGHT;
 
@@ -342,6 +424,7 @@ void raySetup (){
       //double temp2[3] = {x_cord, y_cord, SCREEN_DISTANCE*-1};
       //ray.direction = temp2;
       ray.direction = new double[3]; ray.direction[0] = x_cord; ray.direction[1] = y_cord; ray.direction[2] = SCREEN_DISTANCE * -1;
+      ray.direction = make_unit(ray.direction);
       rays[i][j] = ray;
       bool temp3 = sphere_intersection(spheres[0],rays[i][j]);
       printRay2(rays[i][j]);
@@ -374,7 +457,23 @@ void raySetup (){
          if(intersection){
            buffer[j][k][0] = 255; buffer[j][k][1] = 255; buffer[j][k][2] = 255;  
          } else{
-           buffer[j][k][0] = 0; buffer[j][k][1] = 0; buffer[j][k][2] = 0;
+           //buffer[j][k][0] = 0; buffer[j][k][1] = 0; buffer[j][k][2] = 0;
+         }
+         
+      }
+    }
+  }
+
+  for (int i = 0; i < num_triangles; i++){
+    //if(sphere_intersection)
+
+    for (int j = 0; j < HEIGHT; j++){
+      for (int k = 0; k < WIDTH; k++){
+         bool intersection = triangle_intersection(triangles[i],rays[j][k]);
+         if(intersection){
+           buffer[j][k][0] = 255; buffer[j][k][1] = 255; buffer[j][k][2] = 255;  
+         } else{
+           //buffer[j][k][0] = 0; buffer[j][k][1] = 0; buffer[j][k][2] = 0;
          }
          
       }
