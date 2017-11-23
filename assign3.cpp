@@ -6,12 +6,15 @@ Name: <Nikhil Cherukuri>
 */
 
 #include <stdlib.h>
+#include <stdio.h>
 #include <OpenGL/gl.h>
 #include <OpenGL/glu.h>
 #include <GLUT/glut.h>
 #include <pic.h>
 #include <string.h>
-
+#include <math.h> 
+#include <iostream>
+#include <fstream>
 #define MAX_TRIANGLES 2000
 #define MAX_SPHERES 10
 #define MAX_LIGHTS 10
@@ -27,11 +30,21 @@ int mode=MODE_DISPLAY;
 #define WIDTH 640
 #define HEIGHT 480
 
+//#define WIDTH 320
+//#define HEIGHT 240
+
 //the field of view of the camera
 #define fov 60.0
+#define SCREEN_DISTANCE 0.1
 
+#define PI 3.14159265
 unsigned char buffer[HEIGHT][WIDTH][3];
+double SCREEN_WIDTH;
+double SCREEN_HEIGHT;
 
+std::ofstream outfile;
+double SCREEN_HEIGHT_INCR;
+double SCREEN_WIDTH_INCR;
 struct Vertex
 {
   double position[3];
@@ -41,6 +54,13 @@ struct Vertex
   double shininess;
 };
 
+struct Ray
+{
+  double* origin;
+  double* direction;
+};
+
+Ray rays[HEIGHT][WIDTH];
 typedef struct _Triangle
 {
   struct Vertex v[3];
@@ -77,6 +97,19 @@ void plot_pixel(int x,int y,unsigned char r,unsigned char g,unsigned char b);
 //MODIFY THIS FUNCTION
 void draw_scene()
 {
+  /*glMatrixMode(GL_PROJECTION);  // To operate on the Projection matrix
+  glLoadIdentity();             // Reset
+   // Enable perspective projection with fovy, aspect, zNear and zFar
+  gluPerspective(60.0f, (GLfloat)WIDTH/(GLfloat)HEIGHT, 0.01f, 1000.0f);
+
+  glMatrixMode(GL_MODELVIEW);
+
+  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+  glLoadIdentity();
+
+  gluLookAt(0,0,0,
+            0,0,-1,
+            0,1,0);*/
   unsigned int x,y;
   //simple output
   for(x=0; x<WIDTH; x++)
@@ -85,7 +118,8 @@ void draw_scene()
     glBegin(GL_POINTS);
     for(y=0;y < HEIGHT;y++)
     {
-      plot_pixel(x,y,x%256,y%256,(x+y)%256);
+      //plot_pixel(x,y,x%256,y%256,(x+y)%256);
+      plot_pixel(x,y,buffer[y][x][0],buffer[y][x][1],buffer[y][x][2]);
     }
     glEnd();
     glFlush();
@@ -255,15 +289,144 @@ void display()
 
 }
 
+void printRay (Ray ray){
+   //outfile<< "origin = " << "{" << ray.origin[0] << ", " << ray.origin[1] << ", " << ray.origin[2] << " }" << std::endl;
+  // outfile << "dir = " << "{" << ray.direction[0] << ", " << ray.direction[1] << ", " << ray.direction[2] << " }" << std::endl;
+}
+
+void printRay2 (Ray ray){
+   //outfile<< "origin = " << "{" << ray.origin[0] << ", " << ray.origin[1] << ", " << ray.origin[2] << " }" << std::endl;
+   //std::cout << "dir = " << "{" << ray.direction[0] << ", " << ray.direction[1] << ", " << ray.direction[2] << " }" << std::endl;
+}
+
+bool sphere_intersection (Sphere sphere, Ray ray){
+
+  double xo = ray.origin[0]; double yo = ray.origin[1]; double zo = ray.origin[2];
+  double xd = ray.direction[0]; double yd = ray.direction[1]; double zd = ray.direction[2];
+  double xc = sphere.position[0]; double yc = sphere.position[1]; double zc = sphere.position[2];
+
+  double r = sphere.radius;
+
+  double a = (pow(xd,2) + pow(yd,2) + pow(zd,2));
+  double b = 2*(xd*(xo-xc) + yd*(yo-yc) + zd*(zo - zc));
+  double c = pow ((xo-xc),2) + pow ((yo-yc),2) + pow ((zo-zc),2) - pow(r,2);
+
+  double d = pow(b,2) - 4*(a)*(c);
+  outfile << "d = " << d << " xd = " << xd << " yd = " << yd << " zd = " << zd << std::endl;
+  if(d < 0)
+    return false;
+  else
+    return true;
+}
+
+void raySetup (){
+  //double angle = fov/2;
+  double angle = fov/2;
+  double tangent  =  tan ( angle * PI / 180.0 ); 
+  SCREEN_WIDTH = tangent * SCREEN_DISTANCE * 2;
+  SCREEN_HEIGHT = SCREEN_WIDTH * ((double)((double)HEIGHT/(double)WIDTH));
+  SCREEN_WIDTH_INCR = SCREEN_WIDTH / (double) WIDTH;
+  SCREEN_HEIGHT_INCR = SCREEN_HEIGHT /(double) HEIGHT;
+
+  
+  double left_most = SCREEN_WIDTH/2 * -1;
+  double bottom_most = SCREEN_HEIGHT/2 * -1;
+
+  for (int i = 0; i < HEIGHT; i++ ){
+    for (int j = 0; j < WIDTH; j++){
+      double x_cord = j*SCREEN_WIDTH_INCR + left_most;
+      double y_cord = i*SCREEN_HEIGHT_INCR + bottom_most;
+      Ray ray;
+      //double temp[3] = {0,0,0};
+      ray.origin = new double[3]; ray.origin[0] = 0; ray.origin[1] =0; ray.origin[2] = 0;
+      //double temp2[3] = {x_cord, y_cord, SCREEN_DISTANCE*-1};
+      //ray.direction = temp2;
+      ray.direction = new double[3]; ray.direction[0] = x_cord; ray.direction[1] = y_cord; ray.direction[2] = SCREEN_DISTANCE * -1;
+      rays[i][j] = ray;
+      bool temp3 = sphere_intersection(spheres[0],rays[i][j]);
+      printRay2(rays[i][j]);
+       //outfile << "intersects = " << temp3 << std::endl;
+
+    }
+  }
+
+  for (int i = 0; i < HEIGHT; i++ ){
+    for (int j = 0; j < WIDTH; j++){
+      outfile << " i = " << i << " j = " << j << " ";
+      printRay(rays[i][j]);
+       //outfile << "intersects = " << temp3 << std::endl;
+    }
+  }
+
+  std::cout << "angle = " << angle << std::endl;
+  std::cout << "tangent = " << tangent << std::endl;
+  std::cout << "SCREEN_WIDTH = " << SCREEN_WIDTH << std::endl;
+  std::cout << "SCREEN_HEIGHT = " << SCREEN_HEIGHT << std::endl;
+  std::cout << "SCREEN_WIDTH_INCR = " << SCREEN_WIDTH_INCR << std::endl;
+  std::cout << "SCREEN_HEIGHT_INCR = " << SCREEN_HEIGHT_INCR << std::endl;
+
+  for (int i = 0; i < num_spheres; i++){
+    //if(sphere_intersection)
+
+    for (int j = 0; j < HEIGHT; j++){
+      for (int k = 0; k < WIDTH; k++){
+         bool intersection = sphere_intersection(spheres[i],rays[j][k]);
+         if(intersection){
+           buffer[j][k][0] = 255; buffer[j][k][1] = 255; buffer[j][k][2] = 255;  
+         } else{
+           buffer[j][k][0] = 0; buffer[j][k][1] = 0; buffer[j][k][2] = 0;
+         }
+         
+      }
+    }
+  }
+  //printf(" SCREEN_WIDTH = %s , SCREEN_HEIGHT = %s\n", SCREEN_WIDTH, SCREEN_HEIGHT); 
+  outfile.close();
+}
+
+double* getDir(int ix, int iy){
+  double direction[3];
+  direction[2] = SCREEN_DISTANCE*-1;
+  return direction;
+}
+void renderPixel(int ix, int iy)
+{
+    Ray ray;
+    bool objFound = false;  // Not used. Only used for reflect traces.
+    double temp[3];
+    temp[0] = 0;  temp[1] = 0; temp[2] = 0;
+    ray.origin = temp;
+    ray.direction = getDir(ix, iy);
+
+    //vec4 color = trace(ray, objFound);
+    //setColor(ix, iy, color);
+}
+
+void render()
+{
+    for (int iy = 0; iy < HEIGHT; iy++)
+        for (int ix = 0; ix < WIDTH; ix++)
+            renderPixel(ix, iy);
+}
+
 void init()
 {
   glMatrixMode(GL_PROJECTION);
   glOrtho(0,WIDTH,0,HEIGHT,1,-1);
   glMatrixMode(GL_MODELVIEW);
   glLoadIdentity();
+  /*glMatrixMode(GL_PROJECTION);  // To operate on the Projection matrix
+  glLoadIdentity();             // Reset
+   // Enable perspective projection with fovy, aspect, zNear and zFar
+  gluPerspective(60.0f, aspect, 0.01f, 1000.0f);
+
+  glMatrixMode(GL_MODELVIEW);*/
 
   glClearColor(0,0,0,0);
   glClear(GL_COLOR_BUFFER_BIT);
+  outfile.open(("PersonalData.txt"));
+  raySetup();
+
 }
 
 void idle()
