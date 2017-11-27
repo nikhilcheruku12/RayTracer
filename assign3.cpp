@@ -27,15 +27,15 @@ char *filename=0;
 int mode=MODE_DISPLAY;
 
 //you may want to make these smaller for debugging purposes
-//#define WIDTH 640
-//#define HEIGHT 480
+#define WIDTH 640
+#define HEIGHT 480
 
-#define WIDTH 320
-#define HEIGHT 240
+//#define WIDTH 320
+//#define HEIGHT 240
 
 //the field of view of the camera
 #define fov 60.0
-#define SCREEN_DISTANCE 0.1
+#define SCREEN_DISTANCE 1
 
 #define PI 3.14159265
 
@@ -46,6 +46,14 @@ double SCREEN_HEIGHT;
 std::ofstream outfile;
 double SCREEN_HEIGHT_INCR;
 double SCREEN_WIDTH_INCR;
+
+
+struct point {
+   double x;
+   double y;
+   double z;
+};
+
 struct Vertex
 {
   double position[3];
@@ -130,17 +138,41 @@ void draw_scene()
   printf("Done!\n"); fflush(stdout);
 }
 
-double* make_unit (double* p){
-    float divisor = sqrt (pow(p[0],2) + pow(p[1],2) + pow(p[2],2));
+point make_unit (point p){
+    float divisor = sqrt (pow(p.x,2) + pow(p.y,2) + pow(p.z,2));
+    if(divisor == 0)
+    {
+      p.x = 0; p.y = 0; p.z = 0;
+      return p;
+    }
+    p.x = p.x / divisor;
+    p.y = p.y / divisor;
+    p.z = p.z / divisor;
+    return p;
+  }
+
+double distance (point p1, point p2){
+  return sqrt( pow(p1.x - p2.x,2) + pow(p1.y - p2.y,2) + pow(p1.z - p2.z,2));
+}
+
+point getPoint (double* d){
+  point p; p.x = d[0]; p.y = d[1]; p.z = d[2];
+}
+double* makeUnit (double* p){
+    double divisor = sqrt (pow(p[0],2) + pow(p[1],2) + pow(p[2],2));
     if(divisor == 0)
     {
       p[0] = 0; p[1] = 0; p[2] = 0;
       return p;
     }
-    p[0] = p[0] / divisor;
-    p[1] = p[1] / divisor;
-    p[2] = p[2] / divisor;
-    return p;
+    double p1[3];
+    std::cout << "p before = " << "{ " << p[0] << ", " << p[1] << ", " << p[2] << "}" << std::endl;
+    p1[0] = p[0] / divisor;
+    p1[1] = p[1] / divisor;
+    p1[2] = p[2] / divisor;
+    std::cout << "p after = " << "{ " << p1[0] << ", " << p1[1] << ", " << p1[2] << "}" << std::endl;
+    //return p1;
+    return p1;
   }
 
 void plot_pixel_display(int x,int y,unsigned char r,unsigned char g,unsigned char b)
@@ -315,12 +347,14 @@ void printRay2 (Ray ray){
    //std::cout << "dir = " << "{" << ray.direction[0] << ", " << ray.direction[1] << ", " << ray.direction[2] << " }" << std::endl;
 }
 
-double* crossProduct (double* u, double* v){
-     double product[3];
-      product[0] = u[1] * v[2] - v[1] * u[2];
-      product[1] = v[0] * u[2] - u[0] * v[2];
-      product[2] = u[0] * v[1] - v[0] * u[1];
-      return make_unit(product);
+void crossProduct (double* u, double* v, double* product){
+     //double product[3];
+    // u_2v_3-u_3v_2,\:u_3v_1-u_1v_3,\:u_1v_2-u_2v_1
+     //u1*v2 -  u2*v1 ; u2*v0 - u0*v2; u0*v1 - u1*v0
+      product[0] = u[1] * v[2] - u[2] * v[1];
+      product[1] = u[2] * v[0] - u[0] * v[2];
+      product[2] = u[0] * v[1] - u[1] * v[0];
+      
   }
 
 double innerProduct (double* u, double* v){
@@ -329,12 +363,165 @@ double innerProduct (double* u, double* v){
       return product;
   }
 
+point crossProduct (point u, point v){
+     point product;
+      product.x = u.y * v.z - v.y * u.z;
+      product.y = v.x * u.z - u.x * v.z;
+      product.z = u.x * v.y - v.x * u.y;
+      return make_unit(product);
+  }
+
+double dotProduct (point u, point v){
+     double product;
+      product = u.x*v.x + u.y*v.y + u.z*v.z;
+      return product;
+  }
+
+point multiplyPoint (point p1, double t){
+  point p; 
+  p.x = p1.x * t;
+  p.y = p1.y * t;
+  p.z = p1.z * t;
+  return p;
+}
+
+point addPoint (point p1, point p2){
+  point p; 
+  p.x = p1.x + p2.x;
+  p.y = p1.y + p2.y;
+  p.z = p1.z + p2.z;
+  return p;
+}
+
+
 void vector (double* a, double* b, double* c){
   a[0] = b[0] - c[0]; a[1] = b[1] - c[1]; a[2] = b[2] - c[2];
   return;
 }
 
-bool triangle_intersection( Triangle triangle, Ray ray) {
+point getEdge  (point p1, point p2){
+  point p; 
+  p.x = p1.x - p2.x;
+  p.y = p1.y - p2.y;
+  p.z = p1.z - p2.z;
+  return p;
+}
+
+/*bool RayIntersectsTriangle(point rayOrigin, 
+                           point rayVector, 
+                           Triangle inTriangle,
+                           point& outIntersectionPoint)
+{
+    const float EPSILON = 0.00001; 
+    point vertex0 = getPoint(inTriangle.v[0].position);
+    point vertex1 = getPoint(inTriangle.v[1].position);  
+    point vertex2 = getPoint(inTriangle.v[2].position);
+    point edge1, edge2, h, s, q;
+    double a,f,u,v;
+    edge1 = getEdge(vertex1 , vertex0);
+    edge2 = getEdge(vertex2 , vertex0);
+    h = crossProduct(rayVector,edge2);
+    a = dotProduct(edge1,h);
+    if (a > -EPSILON && a < EPSILON)
+        return false;
+    f = 1/a;
+    s =  getEdge(rayOrigin, vertex0);
+    u = f * (dotProduct(s,h));
+    if (u < 0.0 || u > 1.0)
+        return false;
+    q = crossProduct(s,edge1);
+    v =  f * dotProduct(rayVector,q);
+    if (v < 0.0 || u + v > 1.0)
+        return false;
+    // At this stage we can compute t to find out where the intersection point is on the line.
+    double  t =  f * dotProduct(edge2,q);
+    if (t > EPSILON) // ray intersection
+    {
+        outIntersectionPoint = addPoint(rayOrigin, multiplyPoint(rayVector,t));
+        return true;
+    }
+    else // This means that there is a line intersection but not a ray intersection.
+        return false;
+}*/
+
+void printDoubles (double* d, std::string Name){
+    outfile << Name << " = {" << d[0] << " , " << d[1] << " , " << d[2] << " }" << std::endl;
+}
+bool trinagle_intr (Triangle triangle, Ray ray, bool print){
+  double* v0 = triangle.v[0].position;
+  double* v1 = triangle.v[1].position;
+  double* v2 = triangle.v[2].position;
+  if(print){
+    printDoubles(v0, "v0");
+    printDoubles(v1,"v1");
+    printDoubles(v2,"v2");
+  }
+  
+  double e1[3],e2[3];
+  vector(e1,v1,v0);
+  vector(e2,v2,v0);
+
+  if(print){
+    printDoubles(e1,"e1");
+    printDoubles(e2,"e2");
+  }
+  
+
+  //double* N = crossProduct(e1,e2); 
+  double N[3];
+  crossProduct(e1,e2,N);
+  //double* N = crossProduct(e2,e1); 
+  //double D = innerProduct(N,v0) * -1; 
+  //double D = innerProduct(N,v0) ; 
+  if(print)
+   {
+    printDoubles(N, "N");
+   } 
+
+   double* temp = makeUnit(N);
+   N[0] = temp[0]; N[1] = temp[1]; N[2] = temp[2];
+   if(print){
+    printDoubles(N, "N unit");
+   }
+
+   double D = innerProduct(N,v0) ; 
+  //float t = - (dot(N, orig) + D) / dot(N, dir); 
+  if( innerProduct(N, ray.direction) == 0)
+    return false;
+  if (print){
+    outfile << "D = " << D << std::endl;
+    printDoubles(ray.direction, "direction");
+    outfile <<  " innerProduct(N, ray.direction) = " << innerProduct(N, ray.direction) << std::endl;
+  }
+  double t =  (D) / ((double)innerProduct(N, ray.direction));
+  if(print)
+  outfile << "t = " << t << std::endl;
+  if(t < 0)
+    return false;
+  
+
+
+  /*point intr_point = multiplyPoint(getPoint(ray.direction),t);
+  double p[3]; p[0] = intr_point.x; p[1] = intr_point.y; p[2] = intr_point.z;*/
+  double p[3]; p[0] = t*ray.direction[0]; p[1] = t*ray.direction[1]; p[2] = t*ray.direction[2];
+  if(print)
+  printDoubles(p, "intr_point");
+  double c0[3] ,c1[3] ,c2[3];
+  double edg0[3], edg1[3], edg2[3];
+  vector(c0,p,v0); vector(c1,p,v1); vector(c2,p,v2);
+  vector(edg0,v1,v0); vector(edg1,v2,v1); vector(edg2,v0,v2);
+
+  double temp0[3], temp1[3], temp2[3];
+  crossProduct(edg0,c0, temp0);
+  crossProduct(edg1,c1, temp1);
+  crossProduct(edg2,c2, temp2);
+  if (innerProduct(N, temp0) > 0 && 
+    innerProduct(N, temp1) > 0 && 
+    innerProduct(N, temp2) > 0) return true;
+
+    return false;
+}
+/*bool triangle_intersection( Triangle triangle, Ray ray) {
 
   double* p = ray.origin;
   double* d = ray.direction;
@@ -377,7 +564,7 @@ bool triangle_intersection( Triangle triangle, Ray ray) {
      // but not a ray intersection
      return (false);
 
-}
+}*/
 
 
 bool sphere_intersection (Sphere sphere, Ray ray){
@@ -393,12 +580,55 @@ bool sphere_intersection (Sphere sphere, Ray ray){
   double c = pow ((xo-xc),2) + pow ((yo-yc),2) + pow ((zo-zc),2) - pow(r,2);
 
   double d = pow(b,2) - 4*(a)*(c);
-  outfile << "d = " << d << " xd = " << xd << " yd = " << yd << " zd = " << zd << std::endl;
+ // outfile << "d = " << d << " xd = " << xd << " yd = " << yd << " zd = " << zd << std::endl;
   if(d < 0)
     return false;
   else
     return true;
 }
+
+/*point sphere_intersection (Sphere sphere, Ray ray){
+
+  double xo = ray.origin[0]; double yo = ray.origin[1]; double zo = ray.origin[2];
+  double xd = ray.direction[0]; double yd = ray.direction[1]; double zd = ray.direction[2];
+  double xc = sphere.position[0]; double yc = sphere.position[1]; double zc = sphere.position[2];
+
+  double r = sphere.radius;
+
+  double a = (pow(xd,2) + pow(yd,2) + pow(zd,2));
+  double b = 2*(xd*(xo-xc) + yd*(yo-yc) + zd*(zo - zc));
+  double c = pow ((xo-xc),2) + pow ((yo-yc),2) + pow ((zo-zc),2) - pow(r,2);
+
+  double d = pow(b,2) - 4*(a)*(c);
+  outfile << "d = " << d << " xd = " << xd << " yd = " << yd << " zd = " << zd << std::endl;
+  if(d < 0)
+    return NULL;
+  else if (d == 0)
+  {
+    double t = -b/2*(a);
+    point p; p.x = xo + xd*t; p.y = yo + yd*t; p.z = zo + zd*t;
+    return p;
+  }
+
+  else{
+    double t1 = (-b+d)/(2*(a));
+    double t2 = (-b-d)/(2*(a));
+    point p;
+    point p1; p.x = xo + xd*t1; p.y = yo + yd*t1; p.z = zo + zd*t1;
+    point p2; p.x = xo + xd*t2; p.y = yo + yd*t2; p.z = zo + zd*t2;
+
+    point rayDir; rayDir.x = ray.direction[0]; rayDir.y = ray.direction[1]; rayDir.z = ray.direction[2];
+    double distance1 = distance(p1,rayDir);
+    double distance2 = distance(p2,,rayDir);
+
+    if(distance1 < distance2){
+      p = p1;
+    } else{
+      p = p2;
+    }
+    return p;
+  }
+}*/
 
 void raySetup (){
   //double angle = fov/2;
@@ -418,13 +648,19 @@ void raySetup (){
     for (int j = 0; j < WIDTH; j++){
       double x_cord = j*SCREEN_WIDTH_INCR + left_most;
       double y_cord = i*SCREEN_HEIGHT_INCR + bottom_most;
+
+      //double x_cord = SCREEN_WIDTH/2 - (j*SCREEN_WIDTH_INCR);
+      //double y_cord = SCREEN_HEIGHT/2 - (i*SCREEN_HEIGHT_INCR);
+
       Ray ray;
       //double temp[3] = {0,0,0};
       ray.origin = new double[3]; ray.origin[0] = 0; ray.origin[1] =0; ray.origin[2] = 0;
       //double temp2[3] = {x_cord, y_cord, SCREEN_DISTANCE*-1};
       //ray.direction = temp2;
       ray.direction = new double[3]; ray.direction[0] = x_cord; ray.direction[1] = y_cord; ray.direction[2] = SCREEN_DISTANCE * -1;
-      ray.direction = make_unit(ray.direction);
+      //ray.direction = makeUnit(ray.direction);
+      double* temp = makeUnit(ray.direction);
+      ray.direction[0] = temp[0]; ray.direction[1] = temp[1]; ray.direction[2] = temp[2];
       rays[i][j] = ray;
       bool temp3 = sphere_intersection(spheres[0],rays[i][j]);
       printRay2(rays[i][j]);
@@ -435,7 +671,7 @@ void raySetup (){
 
   for (int i = 0; i < HEIGHT; i++ ){
     for (int j = 0; j < WIDTH; j++){
-      outfile << " i = " << i << " j = " << j << " ";
+      //outfile << " i = " << i << " j = " << j << " ";
       printRay(rays[i][j]);
        //outfile << "intersects = " << temp3 << std::endl;
     }
@@ -466,10 +702,24 @@ void raySetup (){
 
   for (int i = 0; i < num_triangles; i++){
     //if(sphere_intersection)
-
+    outfile << "Triangle number = " << i << std::endl;
     for (int j = 0; j < HEIGHT; j++){
       for (int k = 0; k < WIDTH; k++){
-         bool intersection = triangle_intersection(triangles[i],rays[j][k]);
+         //bool intersection = triangle_intersection(triangles[i],rays[j][k]);
+         // point p;
+         /*bool intersection = RayIntersectsTriangle(getPoint(rays[j][k].origin),
+                                                   getPoint(rays[j][k].direction),
+                                                   triangles[i], p );*/
+         //outfile << "k = " << k << " j = " << j << std::endl;
+          bool intersection;
+          if(k >= 67 && k <= 272 && j >= 31 && j <= 235){
+            outfile << "k = " << k << " j = " << j << std::endl;
+            intersection = trinagle_intr(triangles[i], rays[j][k], true);
+          }
+           
+
+          else
+            intersection = trinagle_intr(triangles[i], rays[j][k], false);
          if(intersection){
            buffer[j][k][0] = 255; buffer[j][k][1] = 255; buffer[j][k][2] = 255;  
          } else{
